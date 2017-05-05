@@ -2,23 +2,23 @@ package documentdb
 
 import (
 	"fmt"
-	"testing"
+	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 // I more interested in the request, instead of the response
 type RequestRecorder struct {
-	Header	http.Header
-	Body	string
+	Header http.Header
+	Body   string
 }
 
 type MockServer struct {
 	*httptest.Server
 	RequestRecorder
-	Status	interface{}
+	Status interface{}
 }
 
 func (m *MockServer) SetStatus(status int) {
@@ -64,7 +64,7 @@ func TestRead(t *testing.T) {
 	assert := assert.New(t)
 	s := ServerFactory(`{"_colls": "colls"}`, 500)
 	defer s.Close()
-	client := &Client{Url:s.URL, Config:Config{"YXJpZWwNCg=="}}
+	client := &Client{Url: s.URL, Config: Config{"YXJpZWwNCg=="}}
 
 	// First call
 	var db Database
@@ -82,7 +82,7 @@ func TestQuery(t *testing.T) {
 	assert := assert.New(t)
 	s := ServerFactory(`{"_colls": "colls"}`, 500)
 	defer s.Close()
-	client := &Client{Url:s.URL, Config:Config{"YXJpZWwNCg=="}}
+	client := &Client{Url: s.URL, Config: Config{"YXJpZWwNCg=="}}
 
 	// First call
 	var db Database
@@ -102,11 +102,11 @@ func TestCreate(t *testing.T) {
 	s := ServerFactory(`{"_colls": "colls"}`, `{"id": "9"}`, 500)
 	s.SetStatus(http.StatusCreated)
 	defer s.Close()
-	client := &Client{Url:s.URL, Config:Config{"YXJpZWwNCg=="}}
+	client := &Client{Url: s.URL, Config: Config{"YXJpZWwNCg=="}}
 
 	// First call
 	var db Database
-	err := client.Create("dbs", `{"id": 3}`, &db)
+	err := client.Create("dbs", `{"id": 3}`, &db, nil)
 	s.AssertHeaders(t, HEADER_XDATE, HEADER_AUTH, HEADER_VER)
 	assert.Equal(db.Colls, "colls", "Should fill the fields from response body")
 	assert.Nil(err, "err should be nil")
@@ -114,13 +114,13 @@ func TestCreate(t *testing.T) {
 	// Second call
 	var doc, tDoc Document
 	tDoc.Id = "9"
-	err = client.Create("dbs", tDoc, &doc)
+	err = client.Create("dbs", tDoc, &doc, nil)
 	s.AssertHeaders(t, HEADER_XDATE, HEADER_AUTH, HEADER_VER)
 	assert.Equal(doc.Id, "9", "Should fill the fields from response body")
 	assert.Nil(err, "err should be nil")
 
 	// Last Call, when StatusCode != StatusOK && StatusCreated
-	err = client.Create("dbs", tDoc, &doc)
+	err = client.Create("dbs", tDoc, &doc, nil)
 	assert.Equal(err.Error(), "500, DocumentDB error")
 }
 
@@ -129,7 +129,7 @@ func TestDelete(t *testing.T) {
 	s := ServerFactory(`10`, 500)
 	s.SetStatus(http.StatusNoContent)
 	defer s.Close()
-	client := &Client{Url:s.URL, Config:Config{"YXJpZWwNCg=="}}
+	client := &Client{Url: s.URL, Config: Config{"YXJpZWwNCg=="}}
 
 	// First call
 	err := client.Delete("/dbs/b7NTAS==/")
@@ -146,7 +146,7 @@ func TestReplace(t *testing.T) {
 	s := ServerFactory(`{"_colls": "colls"}`, `{"id": "9"}`, 500)
 	s.SetStatus(http.StatusOK)
 	defer s.Close()
-	client := &Client{Url:s.URL, Config:Config{"YXJpZWwNCg=="}}
+	client := &Client{Url: s.URL, Config: Config{"YXJpZWwNCg=="}}
 
 	// First call
 	var db Database
@@ -173,7 +173,7 @@ func TestExecute(t *testing.T) {
 	s := ServerFactory(`{"_colls": "colls"}`, `{"id": "9"}`, 500)
 	s.SetStatus(http.StatusOK)
 	defer s.Close()
-	client := &Client{Url:s.URL, Config:Config{"YXJpZWwNCg=="}}
+	client := &Client{Url: s.URL, Config: Config{"YXJpZWwNCg=="}}
 
 	// First call
 	var db Database
