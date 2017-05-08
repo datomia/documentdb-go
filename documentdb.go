@@ -7,7 +7,23 @@
 //
 package documentdb
 
-import "reflect"
+import (
+	"reflect"
+	"fmt"
+	"errors"
+	"encoding/json"
+)
+
+var (
+	ErrNotFound = errors.New("not found")
+)
+
+func IsExists(err error) bool {
+	if e, ok := err.(*RequestError); ok && e.Code == "Conflict" {
+		return true
+	}
+	return false
+}
 
 type Config struct {
 	MasterKey string
@@ -23,6 +39,109 @@ func New(url string, config Config) *DocumentDB {
 	client.Url = url
 	client.Config = config
 	return &DocumentDB{client}
+}
+
+func selectByID(id string) string {
+	return fmt.Sprintf("SELECT * FROM ROOT r WHERE r.id='%s'", id)
+}
+
+func (c *DocumentDB) CreateDB(id string) (*DB, error) {
+	d, err := c.CreateDatabase(map[string]string{"id": id})
+	if err != nil {
+		return nil, err
+	}
+	return &DB{c: c, Database: *d}, nil
+}
+
+func (c *DocumentDB) CreateDBIfNotExists(id string) (*DB, error) {
+	d, err := c.CreateDB(id)
+	if IsExists(err) {
+		return c.DB(id)
+	}
+	return d, err
+}
+
+func (c *DocumentDB) DB(id string) (*DB, error) {
+	dbs, err := c.QueryDatabases(selectByID(id))
+	if err != nil {
+		return nil, err
+	} else if len(dbs) == 0 {
+		return nil, ErrNotFound
+	}
+	return &DB{c:c,Database:dbs[0]}, nil
+}
+
+type DB struct{
+	c *DocumentDB
+	Database
+}
+
+func (db *DB) CreateCollection(id string) (*Col, error) {
+	c, err := db.c.CreateCollection(db.Self, map[string]string{"id": id})
+	if err != nil {
+		return nil, err
+	}
+	return &Col{db: db, Collection: *c}, nil
+}
+
+func (db *DB) CreateCollectionIfNotExists(id string) (*Col, error) {
+	c, err := db.CreateCollection(id)
+	if IsExists(err) {
+		return db.C(id)
+	}
+	return c, err
+}
+
+func (db *DB) C(id string) (*Col, error) {
+	colls, err := db.c.QueryCollections(db.Self, selectByID(id))
+	if err != nil {
+		return nil, err
+	} else if len(colls) == 0 {
+		return nil, ErrNotFound
+	}
+	return &Col{db: db, Collection: colls[0]}, nil
+}
+
+type Col struct{
+	db *DB
+	Collection
+}
+
+func (c *Col) CreateProc(id, fnc string) (*Proc, error) {
+	proc, err := c.db.c.CreateStoredProcedure(c.Self, map[string]string{
+		"id": id, "body": fnc,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &Proc{c: c, Sproc: *proc}, nil
+}
+
+func (c *Col) Proc(id string) (*Proc, error) {
+	procs, err := c.db.c.QueryStoredProcedures(c.Self, selectByID(id))
+	if err != nil {
+		return nil, err
+	} else if len(procs) == 0 {
+		return nil, ErrNotFound
+	}
+	return &Proc{c: c, Sproc: procs[0]}, nil
+}
+
+type Proc struct{
+	c *Col
+	Sproc
+}
+func (p *Proc) Execute(out interface{}, args ...interface{}) error {
+	var params interface{}
+	if len(args) != 0 {
+		params = args
+	}
+	var data json.RawMessage
+	err :=  p.c.db.c.ExecuteStoredProcedure(p.Self, params, &data)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, out)
 }
 
 // TODO: Add `requestOptions` arguments

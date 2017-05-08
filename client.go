@@ -123,7 +123,7 @@ func path(url string, args ...string) (link string) {
 
 // Read json response to given interface(struct, map, ..)
 func readJson(reader io.Reader, data interface{}) error {
-	return json.NewDecoder(reader).Decode(&data)
+	return json.NewDecoder(reader).Decode(data)
 }
 
 // Stringify query-string as documentdb expected
