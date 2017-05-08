@@ -26,12 +26,12 @@ type Client struct {
 
 // Read resource by self link
 func (c *Client) Read(link string, ret interface{}) error {
-	return c.method("GET", link, http.StatusOK, ret, &bytes.Buffer{}, nil)
+	return c.method("GET", link, ret, &bytes.Buffer{}, nil)
 }
 
 // Delete resource by self link
 func (c *Client) Delete(link string) error {
-	return c.method("DELETE", link, http.StatusNoContent, nil, &bytes.Buffer{}, nil)
+	return c.method("DELETE", link, nil, &bytes.Buffer{}, nil)
 }
 
 // Query resource
@@ -46,7 +46,7 @@ func (c *Client) Query(link, query string, ret interface{}) error {
 		return err
 	}
 	r.QueryHeaders(buf.Len())
-	return c.do(r, http.StatusOK, ret)
+	return c.do(r, ret)
 }
 
 // Create resource
@@ -56,7 +56,7 @@ func (c *Client) Create(link string, body, ret interface{}, headers map[string]s
 		return err
 	}
 	buf := bytes.NewBuffer(data)
-	return c.method("POST", link, http.StatusCreated, ret, buf, headers)
+	return c.method("POST", link, ret, buf, headers)
 }
 
 // Replace resource
@@ -66,7 +66,7 @@ func (c *Client) Replace(link string, body, ret interface{}) error {
 		return err
 	}
 	buf := bytes.NewBuffer(data)
-	return c.method("PUT", link, http.StatusOK, ret, buf, nil)
+	return c.method("PUT", link, ret, buf, nil)
 }
 
 // Replace resource
@@ -77,11 +77,11 @@ func (c *Client) Execute(link string, body, ret interface{}) error {
 		return err
 	}
 	buf := bytes.NewBuffer(data)
-	return c.method("POST", link, http.StatusOK, ret, buf, nil)
+	return c.method("POST", link, ret, buf, nil)
 }
 
 // Private generic method resource
-func (c *Client) method(method, link string, status int, ret interface{}, body *bytes.Buffer, headers map[string]string) (err error) {
+func (c *Client) method(method, link string, ret interface{}, body *bytes.Buffer, headers map[string]string) (err error) {
 	req, err := http.NewRequest(method, path(c.Url, link), body)
 	if err != nil {
 		return err
@@ -93,16 +93,16 @@ func (c *Client) method(method, link string, status int, ret interface{}, body *
 	if err = r.DefaultHeaders(c.Config.MasterKey); err != nil {
 		return err
 	}
-	return c.do(r, status, ret)
+	return c.do(r, ret)
 }
 
 // Private Do function, DRY
-func (c *Client) do(r *Request, status int, data interface{}) error {
+func (c *Client) do(r *Request, data interface{}) error {
 	resp, err := c.Do(r.Request)
 	if err != nil {
 		return err
 	}
-	if resp.StatusCode != status {
+	if resp.StatusCode >= 300 {
 		err = &RequestError{}
 		readJson(resp.Body, &err)
 		return err
