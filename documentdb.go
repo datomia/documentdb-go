@@ -8,10 +8,10 @@
 package documentdb
 
 import (
-	"reflect"
-	"fmt"
-	"errors"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"reflect"
 )
 
 var (
@@ -23,6 +23,15 @@ func IsExists(err error) bool {
 		return true
 	}
 	return false
+}
+
+// Id setter
+func Doc(id string) Document {
+	return Document{
+		Resource: Resource{
+			Id: id,
+		},
+	}
 }
 
 type Config struct {
@@ -68,10 +77,10 @@ func (c *DocumentDB) DB(id string) (*DB, error) {
 	} else if len(dbs) == 0 {
 		return nil, ErrNotFound
 	}
-	return &DB{c:c,Database:dbs[0]}, nil
+	return &DB{c: c, Database: dbs[0]}, nil
 }
 
-type DB struct{
+type DB struct {
 	c *DocumentDB
 	Database
 }
@@ -102,7 +111,7 @@ func (db *DB) C(id string) (*Col, error) {
 	return &Col{db: db, Collection: colls[0]}, nil
 }
 
-type Col struct{
+type Col struct {
 	db *DB
 	Collection
 }
@@ -127,17 +136,18 @@ func (c *Col) Proc(id string) (*Proc, error) {
 	return &Proc{c: c, Sproc: procs[0]}, nil
 }
 
-type Proc struct{
+type Proc struct {
 	c *Col
 	Sproc
 }
+
 func (p *Proc) Execute(out interface{}, args ...interface{}) error {
 	var params interface{}
 	if len(args) != 0 {
 		params = args
 	}
 	var data json.RawMessage
-	err :=  p.c.db.c.ExecuteStoredProcedure(p.Self, params, &data)
+	err := p.c.db.c.ExecuteStoredProcedure(p.Self, params, &data)
 	if err != nil {
 		return err
 	}
