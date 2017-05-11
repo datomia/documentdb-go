@@ -4,18 +4,20 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const (
-	HEADER_XDATE    = "X-Ms-Date"
-	HEADER_AUTH     = "Authorization"
-	HEADER_VER      = "X-Ms-Version"
-	HEADER_CONTYPE  = "Content-Type"
-	HEADER_CONLEN   = "Content-Length"
-	HEADER_IS_QUERY = "X-Ms-Documentdb-Isquery"
-	HEADER_UPSERT   = "X-Ms-Documentdb-Is-Upsert"
+	HEADER_XDATE        = "X-Ms-Date"
+	HEADER_AUTH         = "Authorization"
+	HEADER_VER          = "X-Ms-Version"
+	HEADER_CONTYPE      = "Content-Type"
+	HEADER_CONLEN       = "Content-Length"
+	HEADER_IS_QUERY     = "X-Ms-Documentdb-Isquery"
+	HEADER_UPSERT       = "X-Ms-Documentdb-Is-Upsert"
+	HEADER_CONTINUATION = "X-Ms-Continuation-Token"
 )
 
 // Request Error
@@ -61,10 +63,15 @@ func (req *Request) DefaultHeaders(mKey string) (err error) {
 }
 
 // Add headers for query request
-func (req *Request) QueryHeaders(len int) {
-	req.Header.Add(HEADER_CONTYPE, "application/query+json")
-	req.Header.Add(HEADER_IS_QUERY, "true")
-	req.Header.Add(HEADER_CONLEN, string(len))
+func (req *Request) QueryHeaders(len int, token string) {
+	if len > 0 {
+		req.Header.Add(HEADER_CONTYPE, "application/query+json")
+		req.Header.Add(HEADER_IS_QUERY, "true")
+		req.Header.Add(HEADER_CONLEN, strconv.Itoa(len))
+	}
+	if token != "" {
+		req.Header.Add(HEADER_CONTINUATION, token)
+	}
 }
 
 // Get path and return resource Id and Type

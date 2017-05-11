@@ -10,7 +10,6 @@ package documentdb
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"reflect"
 )
 
@@ -50,8 +49,11 @@ func New(url string, config Config) *DocumentDB {
 	return &DocumentDB{client}
 }
 
-func selectByID(id string) string {
-	return fmt.Sprintf("SELECT * FROM ROOT r WHERE r.id='%s'", id)
+func selectByID(id string) *Query {
+	return &Query{
+		Text:   "SELECT * FROM ROOT r WHERE r.id = @id",
+		Params: []QueryParam{{Name: "@id", Value: id}},
+	}
 }
 
 func (c *DocumentDB) CreateDB(id string) (*DB, error) {
@@ -85,6 +87,10 @@ type DB struct {
 	Database
 }
 
+func (db *DB) Delete() error {
+	return db.c.DeleteDatabase(db.Self)
+}
+
 func (db *DB) CreateCollection(id string) (*Col, error) {
 	c, err := db.c.CreateCollection(db.Self, map[string]string{"id": id})
 	if err != nil {
@@ -116,14 +122,25 @@ type Col struct {
 	Collection
 }
 
+func (c *Col) Delete() error {
+	return c.db.c.DeleteCollection(c.Self)
+}
+
+func (c *Col) QueryDocuments(qu *Query, out interface{}) (string, error) {
+	return c.db.c.QueryDocuments(c.Self, qu, out)
+}
+
+func (c *Col) CreateDocument(doc interface{}) error {
+	return c.db.c.CreateDocument(c.Self, doc)
+}
+
 func (c *Col) CreateProc(id, fnc string) (*Proc, error) {
-	proc, err := c.db.c.CreateStoredProcedure(c.Self, map[string]string{
-		"id": id, "body": fnc,
-	})
-	if err != nil {
+	p := &Proc{c: c, Sproc: Sproc{Body: fnc}}
+	p.Id = id
+	if err := c.db.c.CreateStoredProcedure(c.Self, &p.Sproc); err != nil {
 		return nil, err
 	}
-	return &Proc{c: c, Sproc: *proc}, nil
+	return p, nil
 }
 
 func (c *Col) Proc(id string) (*Proc, error) {
@@ -157,7 +174,7 @@ func (p *Proc) Execute(out interface{}, args ...interface{}) error {
 // TODO: Add `requestOptions` arguments
 // Read database by self link
 func (c *DocumentDB) ReadDatabase(link string) (db *Database, err error) {
-	err = c.client.Read(link, &db)
+	_, err = c.client.Query(link, nil, &db)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +183,7 @@ func (c *DocumentDB) ReadDatabase(link string) (db *Database, err error) {
 
 // Read collection by self link
 func (c *DocumentDB) ReadCollection(link string) (coll *Collection, err error) {
-	err = c.client.Read(link, &coll)
+	_, err = c.client.Query(link, nil, &coll)
 	if err != nil {
 		return nil, err
 	}
@@ -175,13 +192,13 @@ func (c *DocumentDB) ReadCollection(link string) (coll *Collection, err error) {
 
 // Read document by self link
 func (c *DocumentDB) ReadDocument(link string, doc interface{}) (err error) {
-	err = c.client.Read(link, &doc)
+	_, err = c.client.Query(link, nil, &doc)
 	return
 }
 
 // Read sporc by self link
 func (c *DocumentDB) ReadStoredProcedure(link string) (sproc *Sproc, err error) {
-	err = c.client.Read(link, &sproc)
+	_, err = c.client.Query(link, nil, &sproc)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +207,7 @@ func (c *DocumentDB) ReadStoredProcedure(link string) (sproc *Sproc, err error) 
 
 // Read udf by self link
 func (c *DocumentDB) ReadUserDefinedFunction(link string) (udf *UDF, err error) {
-	err = c.client.Read(link, &udf)
+	_, err = c.client.Query(link, nil, &udf)
 	if err != nil {
 		return nil, err
 	}
@@ -199,41 +216,41 @@ func (c *DocumentDB) ReadUserDefinedFunction(link string) (udf *UDF, err error) 
 
 // Read all databases
 func (c *DocumentDB) ReadDatabases() (dbs []Database, err error) {
-	return c.QueryDatabases("")
+	return c.QueryDatabases(nil)
 }
 
 // Read all collections by db selflink
 func (c *DocumentDB) ReadCollections(db string) (colls []Collection, err error) {
-	return c.QueryCollections(db, "")
+	return c.QueryCollections(db, nil)
 }
 
 // Read all sprocs by collection self link
 func (c *DocumentDB) ReadStoredProcedures(coll string) (sprocs []Sproc, err error) {
-	return c.QueryStoredProcedures(coll, "")
+	return c.QueryStoredProcedures(coll, nil)
 }
 
 // Read all udfs by collection self link
 func (c *DocumentDB) ReadUserDefinedFunctions(coll string) (udfs []UDF, err error) {
-	return c.QueryUserDefinedFunctions(coll, "")
+	return c.QueryUserDefinedFunctions(coll, nil)
 }
 
 // Read all collection documents by self link
 // TODO: use iterator for heavy transactions
-func (c *DocumentDB) ReadDocuments(coll string, docs interface{}) (err error) {
-	return c.QueryDocuments(coll, "", docs)
+func (c *DocumentDB) ReadDocuments(coll string, ctoken string, docs interface{}) (token string, err error) {
+	var q *Query
+	if ctoken != "" {
+		q = &Query{Token: ctoken}
+	}
+	return c.QueryDocuments(coll, q, docs)
 }
 
 // Read all databases that satisfy a query
-func (c *DocumentDB) QueryDatabases(query string) (dbs []Database, err error) {
-	data := struct {
+func (c *DocumentDB) QueryDatabases(query *Query) (dbs []Database, err error) {
+	var data struct {
 		Databases []Database `json:"Databases,omitempty"`
 		Count     int        `json:"_count,omitempty"`
-	}{}
-	if len(query) > 0 {
-		err = c.client.Query("dbs", query, &data)
-	} else {
-		err = c.client.Read("dbs", &data)
 	}
+	_, err = c.client.Query("dbs", query, &data)
 	if dbs = data.Databases; err != nil {
 		dbs = nil
 	}
@@ -241,16 +258,12 @@ func (c *DocumentDB) QueryDatabases(query string) (dbs []Database, err error) {
 }
 
 // Read all db-collection that satisfy a query
-func (c *DocumentDB) QueryCollections(db, query string) (colls []Collection, err error) {
-	data := struct {
+func (c *DocumentDB) QueryCollections(db string, query *Query) (colls []Collection, err error) {
+	var data struct {
 		Collections []Collection `json:"DocumentCollections,omitempty"`
 		Count       int          `json:"_count,omitempty"`
-	}{}
-	if len(query) > 0 {
-		err = c.client.Query(db+"colls/", query, &data)
-	} else {
-		err = c.client.Read(db+"colls/", &data)
 	}
+	_, err = c.client.Query(db+"colls/", query, &data)
 	if colls = data.Collections; err != nil {
 		colls = nil
 	}
@@ -258,16 +271,12 @@ func (c *DocumentDB) QueryCollections(db, query string) (colls []Collection, err
 }
 
 // Read all collection `sprocs` that satisfy a query
-func (c *DocumentDB) QueryStoredProcedures(coll, query string) (sprocs []Sproc, err error) {
-	data := struct {
+func (c *DocumentDB) QueryStoredProcedures(coll string, query *Query) (sprocs []Sproc, err error) {
+	var data struct {
 		Sprocs []Sproc `json:"StoredProcedures,omitempty"`
 		Count  int     `json:"_count,omitempty"`
-	}{}
-	if len(query) > 0 {
-		err = c.client.Query(coll+"sprocs/", query, &data)
-	} else {
-		err = c.client.Read(coll+"sprocs/", &data)
 	}
+	_, err = c.client.Query(coll+"sprocs/", query, &data)
 	if sprocs = data.Sprocs; err != nil {
 		sprocs = nil
 	}
@@ -275,16 +284,12 @@ func (c *DocumentDB) QueryStoredProcedures(coll, query string) (sprocs []Sproc, 
 }
 
 // Read all collection `udfs` that satisfy a query
-func (c *DocumentDB) QueryUserDefinedFunctions(coll, query string) (udfs []UDF, err error) {
-	data := struct {
+func (c *DocumentDB) QueryUserDefinedFunctions(coll string, query *Query) (udfs []UDF, err error) {
+	var data struct {
 		Udfs  []UDF `json:"UserDefinedFunctions,omitempty"`
 		Count int   `json:"_count,omitempty"`
-	}{}
-	if len(query) > 0 {
-		err = c.client.Query(coll+"udfs/", query, &data)
-	} else {
-		err = c.client.Read(coll+"udfs/", &data)
 	}
+	_, err = c.client.Query(coll+"udfs/", query, &data)
 	if udfs = data.Udfs; err != nil {
 		udfs = nil
 	}
@@ -292,17 +297,12 @@ func (c *DocumentDB) QueryUserDefinedFunctions(coll, query string) (udfs []UDF, 
 }
 
 // Read all documents in a collection that satisfy a query
-func (c *DocumentDB) QueryDocuments(coll, query string, docs interface{}) (err error) {
+func (c *DocumentDB) QueryDocuments(coll string, query *Query, docs interface{}) (token string, err error) {
 	data := struct {
 		Documents interface{} `json:"Documents,omitempty"`
 		Count     int         `json:"_count,omitempty"`
 	}{Documents: docs}
-	if len(query) > 0 {
-		err = c.client.Query(coll+"docs/", query, &data)
-	} else {
-		err = c.client.Read(coll+"docs/", &data)
-	}
-	return
+	return c.client.Query(coll+"docs/", query, &data)
 }
 
 // Create database
@@ -324,12 +324,8 @@ func (c *DocumentDB) CreateCollection(db string, body interface{}) (coll *Collec
 }
 
 // Create stored procedure
-func (c *DocumentDB) CreateStoredProcedure(coll string, body interface{}) (sproc *Sproc, err error) {
-	err = c.client.Create(coll+"sprocs/", body, &sproc, nil)
-	if err != nil {
-		return nil, err
-	}
-	return
+func (c *DocumentDB) CreateStoredProcedure(coll string, sproc *Sproc) error {
+	return c.client.Create(coll+"sprocs/", sproc, sproc, nil)
 }
 
 // Create user defined function
