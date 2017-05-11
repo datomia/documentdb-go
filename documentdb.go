@@ -8,7 +8,6 @@
 package documentdb
 
 import (
-	"encoding/json"
 	"errors"
 	"reflect"
 )
@@ -163,12 +162,7 @@ func (p *Proc) Execute(out interface{}, args ...interface{}) error {
 	if len(args) != 0 {
 		params = args
 	}
-	var data json.RawMessage
-	err := p.c.db.c.ExecuteStoredProcedure(p.Self, params, &data)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, out)
+	return p.c.db.c.ExecuteStoredProcedure(p.Self, params, out)
 }
 
 // TODO: Add `requestOptions` arguments
@@ -338,8 +332,11 @@ func (c *DocumentDB) CreateUserDefinedFunction(coll string, body interface{}) (u
 }
 
 func (c *DocumentDB) createDocument(coll string, doc interface{}, headers map[string]string) error {
-	id := reflect.ValueOf(doc).Elem().FieldByName("Id")
-	if id.IsValid() && id.String() == "" {
+	rv := reflect.ValueOf(doc)
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
+	}
+	if id := rv.FieldByName("Id"); id.IsValid() && id.String() == "" {
 		id.SetString(uuid())
 	}
 	return c.client.Create(coll+"docs/", doc, &doc, headers)
@@ -418,6 +415,6 @@ func (c *DocumentDB) ReplaceUserDefinedFunction(link string, body interface{}) (
 
 // Execute stored procedure
 func (c *DocumentDB) ExecuteStoredProcedure(link string, params, body interface{}) (err error) {
-	err = c.client.Execute(link, params, &body)
+	err = c.client.Execute(link, params, body)
 	return
 }

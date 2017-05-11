@@ -17,7 +17,7 @@ const (
 	HEADER_CONLEN       = "Content-Length"
 	HEADER_IS_QUERY     = "X-Ms-Documentdb-Isquery"
 	HEADER_UPSERT       = "X-Ms-Documentdb-Is-Upsert"
-	HEADER_CONTINUATION = "X-Ms-Continuation-Token"
+	HEADER_CONTINUATION = "X-Ms-Continuation"
 )
 
 // Request Error
