@@ -141,8 +141,8 @@ func (c *Col) UpsertDocument(doc interface{}) error {
 	return c.db.c.UpsertDocument(c.Self, doc)
 }
 
-func (c *Col) DeleteDocument(self string) error {
-	return c.db.c.DeleteDocument(self)
+func (c *Col) DeleteDocumentByLink(link string) error {
+	return c.db.c.DeleteDocument(link)
 }
 
 func (c *Col) CreateProc(id, fnc string) (*Proc, error) {
