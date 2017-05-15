@@ -64,11 +64,13 @@ func (c *DocumentDB) CreateDB(id string) (*DB, error) {
 }
 
 func (c *DocumentDB) CreateDBIfNotExists(id string) (*DB, error) {
-	d, err := c.CreateDB(id)
-	if IsExists(err) {
-		return c.DB(id)
+	db, err := c.DB(id)
+	if err == ErrNotFound {
+		if db, err = c.CreateDB(id); IsExists(err) {
+			db, err = c.DB(id)
+		}
 	}
-	return d, err
+	return db, err
 }
 
 func (c *DocumentDB) DB(id string) (*DB, error) {
@@ -99,9 +101,11 @@ func (db *DB) CreateCollection(id string) (*Col, error) {
 }
 
 func (db *DB) CreateCollectionIfNotExists(id string) (*Col, error) {
-	c, err := db.CreateCollection(id)
-	if IsExists(err) {
-		return db.C(id)
+	c, err := db.C(id)
+	if err == ErrNotFound {
+		if c, err = db.CreateCollection(id); IsExists(err) {
+			c, err = db.C(id)
+		}
 	}
 	return c, err
 }
