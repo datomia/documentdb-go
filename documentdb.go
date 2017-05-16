@@ -137,6 +137,10 @@ func (c *Col) CreateDocument(doc interface{}) error {
 	return c.db.c.CreateDocument(c.Self, doc)
 }
 
+func (c *Col) UpsertDocument(doc interface{}) error {
+	return c.db.c.UpsertDocument(c.Self, doc)
+}
+
 func (c *Col) CreateProc(id, fnc string) (*Proc, error) {
 	p := &Proc{c: c, Sproc: Sproc{Body: fnc}}
 	p.Id = id
