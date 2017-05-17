@@ -141,6 +141,10 @@ func (c *Col) UpsertDocument(doc interface{}) error {
 	return c.db.c.UpsertDocument(c.Self, doc)
 }
 
+func (c *Col) DeleteDocumentByLink(link string) error {
+	return c.db.c.DeleteDocument(link)
+}
+
 func (c *Col) CreateProc(id, fnc string) (*Proc, error) {
 	p := &Proc{c: c, Sproc: Sproc{Body: fnc}}
 	p.Id = id
