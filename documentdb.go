@@ -137,8 +137,8 @@ func (c *Col) CreateDocument(doc interface{}) error {
 	return c.db.c.CreateDocument(c.Self, doc)
 }
 
-func (c *Col) UpsertDocument(doc interface{}) error {
-	return c.db.c.UpsertDocument(c.Self, doc)
+func (c *Col) UpsertDocument(doc interface{}, etag string) error {
+	return c.db.c.UpsertDocument(c.Self, doc, etag)
 }
 
 func (c *Col) DeleteDocumentByLink(link string) error {
@@ -360,9 +360,12 @@ func (c *DocumentDB) CreateDocument(coll string, doc interface{}) error {
 }
 
 // Create document
-func (c *DocumentDB) UpsertDocument(coll string, doc interface{}) error {
+func (c *DocumentDB) UpsertDocument(coll string, doc interface{}, etag string) error {
 	headers := map[string]string{
 		HEADER_UPSERT: "true",
+	}
+	if etag != "" {
+		headers[HEADER_IF_MATCH] = etag
 	}
 	return c.createDocument(coll, doc, headers)
 }

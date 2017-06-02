@@ -18,6 +18,7 @@ const (
 	HEADER_IS_QUERY     = "X-Ms-Documentdb-Isquery"
 	HEADER_UPSERT       = "X-Ms-Documentdb-Is-Upsert"
 	HEADER_CONTINUATION = "X-Ms-Continuation"
+	HEADER_IF_MATCH     = "If-Match"
 )
 
 // Request Error
