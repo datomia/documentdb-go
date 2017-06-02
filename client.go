@@ -3,9 +3,14 @@ package documentdb
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
+)
+
+var (
+	ErrPreconditionFailed = errors.New("precondition failed")
 )
 
 type QueryParam struct {
@@ -146,6 +151,9 @@ func (c *Client) do(r *Request, data interface{}) (*http.Response, error) {
 	resp, err := c.Do(r.Request)
 	if err != nil {
 		return nil, err
+	}
+	if resp.StatusCode == 412 {
+		return nil, ErrPreconditionFailed
 	}
 	if resp.StatusCode >= 300 {
 		err = &RequestError{}
