@@ -51,7 +51,7 @@ type Clienter interface {
 type Client struct {
 	Url    string
 	Config Config
-	http.Client
+	Client *http.Client
 }
 
 // Delete resource by self link
@@ -148,10 +148,15 @@ func (c *Client) method(method, link string, ret interface{}, body io.Reader, he
 
 // Private Do function, DRY
 func (c *Client) do(r *Request, data interface{}) (*http.Response, error) {
-	resp, err := c.Do(r.Request)
+	cli := c.Client
+	if cli == nil {
+		cli = http.DefaultClient
+	}
+	resp, err := cli.Do(r.Request)
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode == 412 {
 		return nil, ErrPreconditionFailed
 	}
@@ -160,7 +165,6 @@ func (c *Client) do(r *Request, data interface{}) (*http.Response, error) {
 		readJson(resp.Body, &err)
 		return resp, err
 	}
-	defer resp.Body.Close()
 	if data == nil {
 		return resp, nil
 	}

@@ -9,6 +9,7 @@ package documentdb
 
 import (
 	"errors"
+	"net/http"
 	"reflect"
 )
 
@@ -42,9 +43,11 @@ type DocumentDB struct {
 
 // Create DocumentDBClient
 func New(url string, config Config) *DocumentDB {
-	client := &Client{}
-	client.Url = url
-	client.Config = config
+	client := &Client{
+		Url:    url,
+		Config: config,
+		Client: http.DefaultClient,
+	}
 	return &DocumentDB{client}
 }
 
