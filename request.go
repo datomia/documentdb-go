@@ -19,6 +19,7 @@ const (
 	HEADER_UPSERT       = "X-Ms-Documentdb-Is-Upsert"
 	HEADER_CONTINUATION = "X-Ms-Continuation"
 	HEADER_IF_MATCH     = "If-Match"
+	HEADER_CHARGE       = "X-Ms-Request-Charge"
 )
 
 // Request Error

@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 )
+
+var DebugQueries = false
 
 var (
 	ErrPreconditionFailed = errors.New("precondition failed")
@@ -91,7 +94,13 @@ func (c *Client) Query(link string, query *Query, out interface{}) (string, erro
 	req.QueryHeaders(n, tok)
 	resp, err := c.do(req, out)
 	if err != nil {
+		if DebugQueries {
+			log.Println("docdb:", query.Text, query.Params, "cost:", resp.Header.Get(HEADER_CHARGE), "RU", "error:", err)
+		}
 		return "", err
+	}
+	if DebugQueries {
+		log.Println("docdb:", query.Text, query.Params, "cost:", resp.Header.Get(HEADER_CHARGE), "RU")
 	}
 	return resp.Header.Get(HEADER_CONTINUATION), err
 }
