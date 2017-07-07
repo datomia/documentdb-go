@@ -95,12 +95,12 @@ func (c *Client) Query(link string, query *Query, out interface{}) (string, erro
 	resp, err := c.do(req, out)
 	if err != nil {
 		if DebugQueries {
-			log.Println("docdb:", query.Text, query.Params, "cost:", resp.Header.Get(HEADER_CHARGE), "RU", "error:", err)
+			log.Printf("docdb: %+v, cost: %v RU, error: %v", query, resp.Header.Get(HEADER_CHARGE), err)
 		}
 		return "", err
 	}
 	if DebugQueries {
-		log.Println("docdb:", query.Text, query.Params, "cost:", resp.Header.Get(HEADER_CHARGE), "RU")
+		log.Printf("docdb: %+v, cost: %v RU", query, resp.Header.Get(HEADER_CHARGE))
 	}
 	return resp.Header.Get(HEADER_CONTINUATION), err
 }
