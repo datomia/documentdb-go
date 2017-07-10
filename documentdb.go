@@ -95,18 +95,22 @@ func (db *DB) Delete() error {
 	return db.c.DeleteDatabase(db.Self)
 }
 
-func (db *DB) CreateCollection(id string) (*Col, error) {
-	c, err := db.c.CreateCollection(db.Self, map[string]string{"id": id})
+func (db *DB) CreateCollection(id string, col *Collection) (*Col, error) {
+	if col == nil {
+		col = &Collection{}
+	}
+	col.Id = id
+	c, err := db.c.CreateCollection(db.Self, col)
 	if err != nil {
 		return nil, err
 	}
 	return &Col{db: db, Collection: *c}, nil
 }
 
-func (db *DB) CreateCollectionIfNotExists(id string) (*Col, error) {
+func (db *DB) CreateCollectionIfNotExists(id string, col *Collection) (*Col, error) {
 	c, err := db.C(id)
 	if err == ErrNotFound {
-		if c, err = db.CreateCollection(id); IsExists(err) {
+		if c, err = db.CreateCollection(id, col); IsExists(err) {
 			c, err = db.C(id)
 		}
 	}

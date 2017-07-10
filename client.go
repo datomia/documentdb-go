@@ -94,7 +94,7 @@ func (c *Client) Query(link string, query *Query, out interface{}) (string, erro
 	req.QueryHeaders(n, tok)
 	resp, err := c.do(req, out)
 	if err != nil {
-		if DebugQueries {
+		if DebugQueries && resp != nil {
 			log.Printf("docdb: %+v, cost: %v RU, error: %v", query, resp.Header.Get(HEADER_CHARGE), err)
 		}
 		return "", err
@@ -112,7 +112,10 @@ func (c *Client) Create(link string, body, ret interface{}, headers map[string]s
 		return err
 	}
 	buf := bytes.NewBuffer(data)
-	_, err = c.method("POST", link, ret, buf, headers)
+	resp, err := c.method("POST", link, ret, buf, headers)
+	if DebugQueries && resp != nil {
+		log.Println("docdb create:", body, "cost:", resp.Header.Get(HEADER_CHARGE), "RU", "error:", err)
+	}
 	return err
 }
 
