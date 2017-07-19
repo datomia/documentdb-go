@@ -10,7 +10,10 @@ import (
 	"strings"
 )
 
-var DebugQueries = false
+var (
+	DebugQueries = false
+	CostHook func(string)
+)
 
 var (
 	ErrPreconditionFailed = errors.New("precondition failed")
@@ -59,7 +62,10 @@ type Client struct {
 
 // Delete resource by self link
 func (c *Client) Delete(link string) error {
-	_, err := c.method("DELETE", link, nil, &bytes.Buffer{}, nil)
+	resp, err := c.method("DELETE", link, nil, &bytes.Buffer{}, nil)
+	if DebugQueries && resp != nil {
+		log.Println("docdb delete:", link, "cost:", resp.Header.Get(HEADER_CHARGE), "RU", "error:", err)
+	}
 	return err
 }
 
@@ -126,7 +132,10 @@ func (c *Client) Replace(link string, body, ret interface{}) error {
 		return err
 	}
 	buf := bytes.NewBuffer(data)
-	_, err = c.method("PUT", link, ret, buf, nil)
+	resp, err := c.method("PUT", link, ret, buf, nil)
+	if DebugQueries && resp != nil {
+		log.Println("docdb replace:", link, "cost:", resp.Header.Get(HEADER_CHARGE), "RU", "error:", err)
+	}
 	return err
 }
 
@@ -138,7 +147,10 @@ func (c *Client) Execute(link string, body, ret interface{}) error {
 		return err
 	}
 	buf := bytes.NewBuffer(data)
-	_, err = c.method("POST", link, ret, buf, nil)
+	resp, err := c.method("POST", link, ret, buf, nil)
+	if DebugQueries && resp != nil {
+		log.Println("docdb exec:", body, "cost:", resp.Header.Get(HEADER_CHARGE), "RU", "error:", err)
+	}
 	return err
 }
 
@@ -169,6 +181,9 @@ func (c *Client) do(r *Request, data interface{}) (*http.Response, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if c := resp.Header.Get(HEADER_CHARGE); c != "" && CostHook != nil {
+		CostHook(c)
+	}
 	if resp.StatusCode == 412 {
 		return nil, ErrPreconditionFailed
 	}
