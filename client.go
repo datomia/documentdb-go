@@ -2,18 +2,36 @@ package documentdb
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 )
 
 var (
-	DebugQueries = false
-	CostHook func(string)
+	ResponseHook func(ctx context.Context, method string, headers map[string][]string)
 )
+
+type queryKey struct{}
+type sprocKey struct{}
+type collKey struct{}
+
+func CtxQuery(ctx context.Context) *Query {
+	q, _ := ctx.Value(queryKey{}).(*Query)
+	return q
+}
+
+func CtxSproc(ctx context.Context) string {
+	s, _ := ctx.Value(sprocKey{}).(string)
+	return s
+}
+
+func CtxCollection(ctx context.Context) string {
+	s, _ := ctx.Value(collKey{}).(string)
+	return s
+}
 
 var (
 	ErrPreconditionFailed = errors.New("precondition failed")
@@ -47,11 +65,11 @@ func NewQuery(qu string, params map[string]interface{}) *Query {
 }
 
 type Clienter interface {
-	Delete(link string) error
-	Query(link string, qu *Query, ret interface{}) (token string, err error)
-	Create(link string, body, ret interface{}, headers map[string]string) error
-	Replace(link string, body, ret interface{}) error
-	Execute(link string, body, ret interface{}) error
+	Delete(ctx context.Context, link string) error
+	Query(ctx context.Context, link string, qu *Query, ret interface{}) (token string, err error)
+	Create(ctx context.Context, link string, body, ret interface{}, headers map[string]string) error
+	Replace(ctx context.Context, link string, body, ret interface{}) error
+	Execute(ctx context.Context, link string, body, ret interface{}) error
 }
 
 type Client struct {
@@ -61,16 +79,13 @@ type Client struct {
 }
 
 // Delete resource by self link
-func (c *Client) Delete(link string) error {
-	resp, err := c.method("DELETE", link, nil, &bytes.Buffer{}, nil)
-	if DebugQueries && resp != nil {
-		log.Println("docdb delete:", link, "cost:", resp.Header.Get(HEADER_CHARGE), "RU", "error:", err)
-	}
+func (c *Client) Delete(ctx context.Context, link string) error {
+	_, err := c.method(ctx, "DELETE", link, nil, &bytes.Buffer{}, nil)
 	return err
 }
 
 // Query resource or read it by self link.
-func (c *Client) Query(link string, query *Query, out interface{}) (string, error) {
+func (c *Client) Query(ctx context.Context, link string, query *Query, out interface{}) (string, error) {
 	var (
 		method = "GET"
 		r      io.Reader
@@ -89,6 +104,7 @@ func (c *Client) Query(link string, query *Query, out interface{}) (string, erro
 	if err != nil {
 		return "", err
 	}
+	hr = hr.WithContext(context.WithValue(ctx, queryKey{}, query))
 	req := ResourceRequest(link, hr)
 	if err = req.DefaultHeaders(c.Config.MasterKey); err != nil {
 		return "", err
@@ -100,66 +116,52 @@ func (c *Client) Query(link string, query *Query, out interface{}) (string, erro
 	req.QueryHeaders(n, tok)
 	resp, err := c.do(req, out)
 	if err != nil {
-		if DebugQueries && resp != nil {
-			log.Printf("docdb: %+v, cost: %v RU, error: %v", query, resp.Header.Get(HEADER_CHARGE), err)
-		}
 		return "", err
-	}
-	if DebugQueries {
-		log.Printf("docdb: %+v, cost: %v RU", query, resp.Header.Get(HEADER_CHARGE))
 	}
 	return resp.Header.Get(HEADER_CONTINUATION), err
 }
 
 // Create resource
-func (c *Client) Create(link string, body, ret interface{}, headers map[string]string) error {
+func (c *Client) Create(ctx context.Context, link string, body, ret interface{}, headers map[string]string) error {
 	data, err := stringify(body)
 	if err != nil {
 		return err
 	}
 	buf := bytes.NewBuffer(data)
-	resp, err := c.method("POST", link, ret, buf, headers)
-	if DebugQueries && resp != nil {
-		log.Println("docdb create:", body, "cost:", resp.Header.Get(HEADER_CHARGE), "RU", "error:", err)
-	}
+	_, err = c.method(ctx, "POST", link, ret, buf, headers)
 	return err
 }
 
 // Replace resource
-func (c *Client) Replace(link string, body, ret interface{}) error {
+func (c *Client) Replace(ctx context.Context, link string, body, ret interface{}) error {
 	data, err := stringify(body)
 	if err != nil {
 		return err
 	}
 	buf := bytes.NewBuffer(data)
-	resp, err := c.method("PUT", link, ret, buf, nil)
-	if DebugQueries && resp != nil {
-		log.Println("docdb replace:", link, "cost:", resp.Header.Get(HEADER_CHARGE), "RU", "error:", err)
-	}
+	_, err = c.method(ctx, "PUT", link, ret, buf, nil)
 	return err
 }
 
 // Replace resource
 // TODO: DRY, move to methods instead of actions(POST, PUT, ...)
-func (c *Client) Execute(link string, body, ret interface{}) error {
+func (c *Client) Execute(ctx context.Context, link string, body, ret interface{}) error {
 	data, err := stringify(body)
 	if err != nil {
 		return err
 	}
 	buf := bytes.NewBuffer(data)
-	resp, err := c.method("POST", link, ret, buf, nil)
-	if DebugQueries && resp != nil {
-		log.Println("docdb exec:", body, "cost:", resp.Header.Get(HEADER_CHARGE), "RU", "error:", err)
-	}
+	_, err = c.method(ctx, "POST", link, ret, buf, nil)
 	return err
 }
 
 // Private generic method resource
-func (c *Client) method(method, link string, ret interface{}, body io.Reader, headers map[string]string) (*http.Response, error) {
+func (c *Client) method(ctx context.Context, method, link string, ret interface{}, body io.Reader, headers map[string]string) (*http.Response, error) {
 	req, err := http.NewRequest(method, path(c.Url, link), body)
 	if err != nil {
 		return nil, err
 	}
+	req = req.WithContext(ctx)
 	r := ResourceRequest(link, req)
 	for k, v := range headers {
 		r.Header.Add(k, v)
@@ -181,8 +183,8 @@ func (c *Client) do(r *Request, data interface{}) (*http.Response, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if c := resp.Header.Get(HEADER_CHARGE); c != "" && CostHook != nil {
-		CostHook(c)
+	if ResponseHook != nil {
+		ResponseHook(r.Context(), r.Request.Method, resp.Header)
 	}
 	if resp.StatusCode == 412 {
 		return nil, ErrPreconditionFailed
