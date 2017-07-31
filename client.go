@@ -12,6 +12,7 @@ import (
 
 var (
 	ResponseHook func(ctx context.Context, method string, headers map[string][]string)
+	IgnoreContext bool
 )
 
 type queryKey struct{}
@@ -104,7 +105,7 @@ func (c *Client) Query(ctx context.Context, link string, query *Query, out inter
 	if err != nil {
 		return "", err
 	}
-	hr = hr.WithContext(context.WithValue(ctx, queryKey{}, query))
+	ctx = context.WithValue(ctx, queryKey{}, query)
 	req := ResourceRequest(link, hr)
 	if err = req.DefaultHeaders(c.Config.MasterKey); err != nil {
 		return "", err
@@ -114,7 +115,7 @@ func (c *Client) Query(ctx context.Context, link string, query *Query, out inter
 		tok = query.Token
 	}
 	req.QueryHeaders(n, tok)
-	resp, err := c.do(req, out)
+	resp, err := c.do(ctx, req, out)
 	if err != nil {
 		return "", err
 	}
@@ -161,7 +162,6 @@ func (c *Client) method(ctx context.Context, method, link string, ret interface{
 	if err != nil {
 		return nil, err
 	}
-	req = req.WithContext(ctx)
 	r := ResourceRequest(link, req)
 	for k, v := range headers {
 		r.Header.Add(k, v)
@@ -169,14 +169,17 @@ func (c *Client) method(ctx context.Context, method, link string, ret interface{
 	if err = r.DefaultHeaders(c.Config.MasterKey); err != nil {
 		return nil, err
 	}
-	return c.do(r, ret)
+	return c.do(ctx, r, ret)
 }
 
 // Private Do function, DRY
-func (c *Client) do(r *Request, data interface{}) (*http.Response, error) {
+func (c *Client) do(ctx context.Context, r *Request, data interface{}) (*http.Response, error) {
 	cli := c.Client
 	if cli == nil {
 		cli = http.DefaultClient
+	}
+	if !IgnoreContext {
+		r.Request = r.Request.WithContext(ctx)
 	}
 	resp, err := cli.Do(r.Request)
 	if err != nil {
@@ -184,7 +187,7 @@ func (c *Client) do(r *Request, data interface{}) (*http.Response, error) {
 	}
 	defer resp.Body.Close()
 	if ResponseHook != nil {
-		ResponseHook(r.Context(), r.Request.Method, resp.Header)
+		ResponseHook(ctx, r.Request.Method, resp.Header)
 	}
 	if resp.StatusCode == 412 {
 		return nil, ErrPreconditionFailed
