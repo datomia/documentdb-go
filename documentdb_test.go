@@ -21,7 +21,7 @@ func (c *ClientStub) Create(ctx context.Context, link string, body, ret interfac
 	return nil
 }
 
-func (c *ClientStub) Delete(ctx context.Context, link string) error {
+func (c *ClientStub) Delete(ctx context.Context, link string, headers map[string] string) error {
 	c.Called(link)
 	return nil
 }
@@ -253,15 +253,15 @@ func TestDeleteResource(t *testing.T) {
 	client.AssertCalled(t, "Delete", "self_link_coll")
 
 	client.On("Delete", "self_link_doc").Return(nil)
-	c.DeleteDocument(ctx, "self_link_doc")
+	c.DeleteDocument(ctx, "self_link_doc", "")
 	client.AssertCalled(t, "Delete", "self_link_doc")
 
 	client.On("Delete", "self_link_sproc").Return(nil)
-	c.DeleteDocument(ctx, "self_link_sproc")
+	c.DeleteDocument(ctx, "self_link_sproc", "")
 	client.AssertCalled(t, "Delete", "self_link_sproc")
 
 	client.On("Delete", "self_link_udf").Return(nil)
-	c.DeleteDocument(ctx, "self_link_udf")
+	c.DeleteDocument(ctx, "self_link_udf", "")
 	client.AssertCalled(t, "Delete", "self_link_udf")
 }
 
