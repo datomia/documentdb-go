@@ -132,6 +132,7 @@ type Col struct {
 	db *DB
 	Collection
 }
+
 func (c *Col) ctx(ctx context.Context) context.Context {
 	return context.WithValue(ctx, collKey{}, string(c.Collection.Id))
 }
@@ -145,6 +146,10 @@ func (c *Col) QueryDocuments(ctx context.Context, qu *Query, out interface{}) (s
 
 func (c *Col) CreateDocument(ctx context.Context, doc interface{}) error {
 	return c.db.c.CreateDocument(c.ctx(ctx), c.Self, doc)
+}
+
+func (c *Col) UpdateDocument(ctx context.Context, doc interface{}, etag string) error {
+	return c.db.c.UpdateDocument(c.ctx(ctx), c.Self, doc, etag)
 }
 
 func (c *Col) UpsertDocument(ctx context.Context, doc interface{}, etag string) error {
@@ -370,6 +375,36 @@ func (c *DocumentDB) CreateDocument(ctx context.Context, coll string, doc interf
 	return c.createDocument(ctx, coll, doc, nil)
 }
 
+func (c *DocumentDB) UpdateDocument(ctx context.Context, coll string, doc interface{}, etag string) error {
+	rv := reflect.ValueOf(doc)
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
+	}
+
+	id := rv.FieldByName("Id")
+	if !id.IsValid() || id.String() == "" {
+		id = rv.FieldByName("ID")
+		if !id.IsValid() || id.String() == "" {
+			return errors.New("document doesn't have id")
+		}
+	}
+
+	var docs []Document
+	_, err := c.QueryDocuments(ctx, coll, selectByID(id.String()), &docs)
+	if err != nil {
+		return err
+	}
+	if len(docs) == 0 {
+		return ErrNotFound
+	}
+
+	headers := make(map[string]string)
+	if etag != "" {
+		headers[HEADER_IF_MATCH] = etag
+	}
+	return c.ReplaceDocument(ctx, coll+"docs/"+docs[0].Id, doc, headers)
+}
+
 // Create document
 func (c *DocumentDB) UpsertDocument(ctx context.Context, coll string, doc interface{}, etag string) error {
 	headers := map[string]string{
@@ -413,7 +448,7 @@ func (c *DocumentDB) DeleteUserDefinedFunction(ctx context.Context, link string)
 
 // Replace database
 func (c *DocumentDB) ReplaceDatabase(ctx context.Context, link string, body interface{}) (db *Database, err error) {
-	err = c.client.Replace(ctx, link, body, &db)
+	err = c.client.Replace(ctx, link, body, &db, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -421,13 +456,13 @@ func (c *DocumentDB) ReplaceDatabase(ctx context.Context, link string, body inte
 }
 
 // Replace document
-func (c *DocumentDB) ReplaceDocument(ctx context.Context, link string, doc interface{}) error {
-	return c.client.Replace(ctx, link, doc, &doc)
+func (c *DocumentDB) ReplaceDocument(ctx context.Context, link string, doc interface{}, headers map[string]string) error {
+	return c.client.Replace(ctx, link, doc, &doc, headers)
 }
 
 // Replace stored procedure
 func (c *DocumentDB) ReplaceStoredProcedure(ctx context.Context, link string, body interface{}) (sproc *Sproc, err error) {
-	err = c.client.Replace(ctx, link, body, &sproc)
+	err = c.client.Replace(ctx, link, body, &sproc, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -436,7 +471,7 @@ func (c *DocumentDB) ReplaceStoredProcedure(ctx context.Context, link string, bo
 
 // Replace stored procedure
 func (c *DocumentDB) ReplaceUserDefinedFunction(ctx context.Context, link string, body interface{}) (udf *UDF, err error) {
-	err = c.client.Replace(ctx, link, body, &udf)
+	err = c.client.Replace(ctx, link, body, &udf, nil)
 	if err != nil {
 		return nil, err
 	}
