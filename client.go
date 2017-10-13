@@ -69,7 +69,7 @@ type Clienter interface {
 	Delete(ctx context.Context, link string, headers map[string] string) error
 	Query(ctx context.Context, link string, qu *Query, ret interface{}) (token string, err error)
 	Create(ctx context.Context, link string, body, ret interface{}, headers map[string]string) error
-	Replace(ctx context.Context, link string, body, ret interface{}) error
+	Replace(ctx context.Context, link string, body, ret interface{}, headers map[string]string) error
 	Execute(ctx context.Context, link string, body, ret interface{}) error
 }
 
@@ -134,13 +134,13 @@ func (c *Client) Create(ctx context.Context, link string, body, ret interface{},
 }
 
 // Replace resource
-func (c *Client) Replace(ctx context.Context, link string, body, ret interface{}) error {
+func (c *Client) Replace(ctx context.Context, link string, body, ret interface{}, headers map[string]string) error {
 	data, err := stringify(body)
 	if err != nil {
 		return err
 	}
 	buf := bytes.NewBuffer(data)
-	_, err = c.method(ctx, "PUT", link, ret, buf, nil)
+	_, err = c.method(ctx, "PUT", link, ret, buf, headers)
 	return err
 }
 
