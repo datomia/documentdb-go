@@ -66,7 +66,7 @@ func NewQuery(qu string, params map[string]interface{}) *Query {
 }
 
 type Clienter interface {
-	Delete(ctx context.Context, link string) error
+	Delete(ctx context.Context, link string, headers map[string] string) error
 	Query(ctx context.Context, link string, qu *Query, ret interface{}) (token string, err error)
 	Create(ctx context.Context, link string, body, ret interface{}, headers map[string]string) error
 	Replace(ctx context.Context, link string, body, ret interface{}) error
@@ -80,8 +80,8 @@ type Client struct {
 }
 
 // Delete resource by self link
-func (c *Client) Delete(ctx context.Context, link string) error {
-	_, err := c.method(ctx, "DELETE", link, nil, &bytes.Buffer{}, nil)
+func (c *Client) Delete(ctx context.Context, link string, headers map[string] string) error {
+	_, err := c.method(ctx, "DELETE", link, nil, &bytes.Buffer{}, headers)
 	return err
 }
 

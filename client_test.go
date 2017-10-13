@@ -141,12 +141,12 @@ func TestDelete(t *testing.T) {
 	ctx := context.Background()
 
 	// First call
-	err := client.Delete(ctx, "/dbs/b7NTAS==/")
+	err := client.Delete(ctx, "/dbs/b7NTAS==/", nil)
 	s.AssertHeaders(t, HEADER_XDATE, HEADER_AUTH, HEADER_VER)
 	assert.Nil(err, "err should be nil")
 
 	// Second Call, when StatusCode != StatusOK
-	err = client.Delete(ctx, "/dbs/b7NCAA==/colls/Ad352/")
+	err = client.Delete(ctx, "/dbs/b7NCAA==/colls/Ad352/", nil)
 	assert.Equal(err.Error(), "500, DocumentDB error")
 }
 

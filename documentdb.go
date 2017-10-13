@@ -152,7 +152,7 @@ func (c *Col) UpsertDocument(ctx context.Context, doc interface{}, etag string) 
 }
 
 func (c *Col) DeleteDocumentByLink(ctx context.Context, link string) error {
-	return c.db.c.DeleteDocument(c.ctx(ctx), link)
+	return c.db.c.DeleteDocument(c.ctx(ctx), link, "")
 }
 
 func (c *Col) CreateProc(ctx context.Context, id, fnc string) (*Proc, error) {
@@ -384,27 +384,31 @@ func (c *DocumentDB) UpsertDocument(ctx context.Context, coll string, doc interf
 // TODO: DRY, but the sdk want that[mm.. maybe just client.Delete(self_link)]
 // Delete database
 func (c *DocumentDB) DeleteDatabase(ctx context.Context, link string) error {
-	return c.client.Delete(ctx, link)
+	return c.client.Delete(ctx, link, nil)
 }
 
 // Delete collection
 func (c *DocumentDB) DeleteCollection(ctx context.Context, link string) error {
-	return c.client.Delete(ctx, link)
+	return c.client.Delete(ctx, link, nil)
 }
 
 // Delete collection
-func (c *DocumentDB) DeleteDocument(ctx context.Context, link string) error {
-	return c.client.Delete(ctx, link)
+func (c *DocumentDB) DeleteDocument(ctx context.Context, link string, etag string) error {
+	headers := make(map[string]string, 0)
+	if etag != "" {
+		headers[HEADER_IF_MATCH] = etag
+	}
+	return c.client.Delete(ctx, link, headers)
 }
 
 // Delete stored procedure
 func (c *DocumentDB) DeleteStoredProcedure(ctx context.Context, link string) error {
-	return c.client.Delete(ctx, link)
+	return c.client.Delete(ctx, link,nil)
 }
 
 // Delete user defined function
 func (c *DocumentDB) DeleteUserDefinedFunction(ctx context.Context, link string) error {
-	return c.client.Delete(ctx, link)
+	return c.client.Delete(ctx, link, nil)
 }
 
 // Replace database
