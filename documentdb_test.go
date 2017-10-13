@@ -2,9 +2,10 @@ package documentdb
 
 import (
 	"context"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"testing"
 )
 
 type ClientStub struct {
@@ -21,12 +22,12 @@ func (c *ClientStub) Create(ctx context.Context, link string, body, ret interfac
 	return nil
 }
 
-func (c *ClientStub) Delete(ctx context.Context, link string, headers map[string] string) error {
+func (c *ClientStub) Delete(ctx context.Context, link string, headers map[string]string) error {
 	c.Called(link)
 	return nil
 }
 
-func (c *ClientStub) Replace(ctx context.Context, link string, body, ret interface{}) error {
+func (c *ClientStub) Replace(ctx context.Context, link string, body, ret interface{}, headers map[string]string) error {
 	c.Called(link, body)
 	return nil
 }
@@ -279,7 +280,7 @@ func TestReplaceDocument(t *testing.T) {
 	c := &DocumentDB{client}
 	client.On("Replace", "doc_link", "{}").Return(nil)
 	ctx := context.Background()
-	c.ReplaceDocument(ctx, "doc_link", "{}")
+	c.ReplaceDocument(ctx, "doc_link", "{}", nil)
 	client.AssertCalled(t, "Replace", "doc_link", "{}")
 }
 
