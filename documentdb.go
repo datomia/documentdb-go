@@ -151,8 +151,8 @@ func (c *Col) UpsertDocument(ctx context.Context, doc interface{}, etag string) 
 	return c.db.c.UpsertDocument(c.ctx(ctx), c.Self, doc, etag)
 }
 
-func (c *Col) DeleteDocumentByLink(ctx context.Context, link string) error {
-	return c.db.c.DeleteDocument(c.ctx(ctx), link, "")
+func (c *Col) DeleteDocumentByLink(ctx context.Context, link string, etag string) error {
+	return c.db.c.DeleteDocument(c.ctx(ctx), link, etag)
 }
 
 func (c *Col) CreateProc(ctx context.Context, id, fnc string) (*Proc, error) {
