@@ -12,6 +12,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"encoding/json"
 )
 
 var (
@@ -143,11 +144,11 @@ func (c *Col) QueryDocuments(ctx context.Context, qu *Query, out interface{}) (s
 	return c.db.c.QueryDocuments(c.ctx(ctx), c.Self, qu, out)
 }
 
-func (c *Col) CreateDocument(ctx context.Context, doc interface{}) error {
+func (c *Col) CreateDocument(ctx context.Context, doc interface{}) (string, error) {
 	return c.db.c.CreateDocument(c.ctx(ctx), c.Self, doc)
 }
 
-func (c *Col) UpsertDocument(ctx context.Context, doc interface{}, etag string) error {
+func (c *Col) UpsertDocument(ctx context.Context, doc interface{}, etag string) (string, error) {
 	return c.db.c.UpsertDocument(c.ctx(ctx), c.Self, doc, etag)
 }
 
@@ -354,7 +355,7 @@ func (c *DocumentDB) CreateUserDefinedFunction(ctx context.Context, coll string,
 	return
 }
 
-func (c *DocumentDB) createDocument(ctx context.Context, coll string, doc interface{}, headers map[string]string) error {
+func (c *DocumentDB) createDocument(ctx context.Context, coll string, doc interface{}, headers map[string]string) (string, error) {
 	rv := reflect.ValueOf(doc)
 	if rv.Kind() == reflect.Ptr {
 		rv = rv.Elem()
@@ -362,16 +363,25 @@ func (c *DocumentDB) createDocument(ctx context.Context, coll string, doc interf
 	if id := rv.FieldByName("Id"); id.IsValid() && id.String() == "" {
 		id.SetString(uuid())
 	}
-	return c.client.Create(ctx, coll+"docs/", doc, &doc, headers)
+	var response json.RawMessage
+	if err := c.client.Create(ctx, coll+"docs/", doc, &response, headers); err != nil {
+		return "", err
+	}
+	var metadata struct {
+		Etag string `json:"_etag"`
+	}
+	_ = json.Unmarshal(response, &metadata)
+	_ = json.Unmarshal(response, &doc)
+	return metadata.Etag, nil
 }
 
 // Create document
-func (c *DocumentDB) CreateDocument(ctx context.Context, coll string, doc interface{}) error {
+func (c *DocumentDB) CreateDocument(ctx context.Context, coll string, doc interface{}) (string, error) {
 	return c.createDocument(ctx, coll, doc, nil)
 }
 
 // Create document
-func (c *DocumentDB) UpsertDocument(ctx context.Context, coll string, doc interface{}, etag string) error {
+func (c *DocumentDB) UpsertDocument(ctx context.Context, coll string, doc interface{}, etag string) (string, error) {
 	headers := map[string]string{
 		HEADER_UPSERT: "true",
 	}
