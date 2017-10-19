@@ -53,7 +53,7 @@ func New(url string, config Config) *DocumentDB {
 	return &DocumentDB{client}
 }
 
-func selectByID(id string) *Query {
+func IdQuery(id string) *Query {
 	return &Query{
 		Text:   "SELECT * FROM ROOT r WHERE r.id = @id",
 		Params: []QueryParam{{Name: "@id", Value: id}},
@@ -79,7 +79,7 @@ func (c *DocumentDB) CreateDBIfNotExists(ctx context.Context, id string) (*DB, e
 }
 
 func (c *DocumentDB) DB(ctx context.Context, id string) (*DB, error) {
-	dbs, err := c.QueryDatabases(ctx, selectByID(id))
+	dbs, err := c.QueryDatabases(ctx, IdQuery(id))
 	if err != nil {
 		return nil, err
 	} else if len(dbs) == 0 {
@@ -120,7 +120,7 @@ func (db *DB) CreateCollectionIfNotExists(ctx context.Context, id string, col *C
 }
 
 func (db *DB) C(ctx context.Context, id string) (*Col, error) {
-	colls, err := db.c.QueryCollections(ctx, db.Self, selectByID(id))
+	colls, err := db.c.QueryCollections(ctx, db.Self, IdQuery(id))
 	if err != nil {
 		return nil, err
 	} else if len(colls) == 0 {
@@ -171,7 +171,7 @@ func (c *Col) CreateProc(ctx context.Context, id, fnc string) (*Proc, error) {
 }
 
 func (c *Col) Proc(ctx context.Context, id string) (*Proc, error) {
-	procs, err := c.db.c.QueryStoredProcedures(c.ctx(ctx), c.Self, selectByID(id))
+	procs, err := c.db.c.QueryStoredProcedures(c.ctx(ctx), c.Self, IdQuery(id))
 	if err != nil {
 		return nil, err
 	} else if len(procs) == 0 {
@@ -397,7 +397,7 @@ func (c *DocumentDB) UpdateDocument(ctx context.Context, coll string, doc interf
 	}
 
 	var docs []Document
-	_, err := c.QueryDocuments(ctx, coll, selectByID(id.String()), &docs)
+	_, err := c.QueryDocuments(ctx, coll, IdQuery(id.String()), &docs)
 	if err != nil {
 		return err
 	}
@@ -409,7 +409,7 @@ func (c *DocumentDB) UpdateDocument(ctx context.Context, coll string, doc interf
 	if etag != "" {
 		headers[HEADER_IF_MATCH] = etag
 	}
-	return c.ReplaceDocument(ctx, coll+"docs/"+docs[0].Id, doc, headers)
+	return c.ReplaceDocument(ctx, docs[0].Self, doc, headers)
 }
 
 // Create document
