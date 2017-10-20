@@ -12,7 +12,6 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
-	"encoding/json"
 )
 
 var (
@@ -149,7 +148,7 @@ func (c *Col) CreateDocument(ctx context.Context, doc interface{}) (*Document, e
 	return c.db.c.CreateDocument(c.ctx(ctx), c.Self, doc)
 }
 
-func (c *Col) UpdateDocument(ctx context.Context, doc interface{}, etag string) error {
+func (c *Col) UpdateDocument(ctx context.Context, doc interface{}, etag string) (*Document, error) {
 	return c.db.c.UpdateDocument(c.ctx(ctx), c.Self, doc, etag)
 }
 
@@ -368,12 +367,10 @@ func (c *DocumentDB) createDocument(ctx context.Context, coll string, doc interf
 	if id := rv.FieldByName("Id"); id.IsValid() && id.String() == "" {
 		id.SetString(uuid())
 	}
-	var response json.RawMessage
-	if err := c.client.Create(ctx, coll+"docs/", doc, &response, headers); err != nil {
+	var document Document
+	if err := c.client.Create(ctx, coll+"docs/", doc, &document, headers); err != nil {
 		return nil, err
 	}
-	var document Document
-	_ = json.Unmarshal(response, &document)
 	return &document, nil
 }
 
@@ -382,7 +379,7 @@ func (c *DocumentDB) CreateDocument(ctx context.Context, coll string, doc interf
 	return c.createDocument(ctx, coll, doc, nil)
 }
 
-func (c *DocumentDB) UpdateDocument(ctx context.Context, coll string, doc interface{}, etag string) error {
+func (c *DocumentDB) UpdateDocument(ctx context.Context, coll string, doc interface{}, etag string) (*Document, error) {
 	rv := reflect.ValueOf(doc)
 	if rv.Kind() == reflect.Ptr {
 		rv = rv.Elem()
@@ -392,19 +389,19 @@ func (c *DocumentDB) UpdateDocument(ctx context.Context, coll string, doc interf
 	if !id.IsValid() || id.String() == "" {
 		id = rv.FieldByName("ID")
 		if !id.IsValid() || id.String() == "" {
-			return errors.New("document doesn't have id")
+			return nil, errors.New("document doesn't have id")
 		}
 	}
-
+	
 	var docs []Document
 	_, err := c.QueryDocuments(ctx, coll, IdQuery(id.String()), &docs)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(docs) == 0 {
-		return ErrNotFound
+		return nil, ErrNotFound
 	}
-
+	
 	headers := make(map[string]string)
 	if etag != "" {
 		headers[HEADER_IF_MATCH] = etag
@@ -463,8 +460,12 @@ func (c *DocumentDB) ReplaceDatabase(ctx context.Context, link string, body inte
 }
 
 // Replace document
-func (c *DocumentDB) ReplaceDocument(ctx context.Context, link string, doc interface{}, headers map[string]string) error {
-	return c.client.Replace(ctx, link, doc, &doc, headers)
+func (c *DocumentDB) ReplaceDocument(ctx context.Context, link string, doc interface{}, headers map[string]string) (*Document, error) {
+	var document Document
+	if err := c.client.Replace(ctx, link, doc, &doc, headers); err != nil {
+		return nil, err
+	}
+	return &document, nil
 }
 
 // Replace stored procedure
