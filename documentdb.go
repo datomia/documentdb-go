@@ -12,6 +12,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"strings"
 )
 
 var (
@@ -45,7 +46,7 @@ type DocumentDB struct {
 // Create DocumentDBClient
 func New(url string, config Config) *DocumentDB {
 	client := &Client{
-		Url:    url,
+		Url:    strings.Trim(url, "/"),
 		Config: config,
 		Client: http.DefaultClient,
 	}
@@ -392,7 +393,7 @@ func (c *DocumentDB) UpdateDocument(ctx context.Context, coll string, doc interf
 			return nil, errors.New("document doesn't have id")
 		}
 	}
-	
+
 	var docs []Document
 	_, err := c.QueryDocuments(ctx, coll, IdQuery(id.String()), &docs)
 	if err != nil {
@@ -401,7 +402,7 @@ func (c *DocumentDB) UpdateDocument(ctx context.Context, coll string, doc interf
 	if len(docs) == 0 {
 		return nil, ErrNotFound
 	}
-	
+
 	headers := make(map[string]string)
 	if etag != "" {
 		headers[HEADER_IF_MATCH] = etag
@@ -442,7 +443,7 @@ func (c *DocumentDB) DeleteDocument(ctx context.Context, link string, etag strin
 
 // Delete stored procedure
 func (c *DocumentDB) DeleteStoredProcedure(ctx context.Context, link string) error {
-	return c.client.Delete(ctx, link,nil)
+	return c.client.Delete(ctx, link, nil)
 }
 
 // Delete user defined function
