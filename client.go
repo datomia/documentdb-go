@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	ResponseHook func(ctx context.Context, method string, headers map[string][]string)
+	ResponseHook  func(ctx context.Context, method string, headers map[string][]string)
 	IgnoreContext bool
 )
 
@@ -36,6 +36,7 @@ func CtxCollection(ctx context.Context) string {
 
 var (
 	ErrPreconditionFailed = errors.New("precondition failed")
+	ErrTooManyRequests    = errors.New("too many requests")
 )
 
 type QueryParam struct {
@@ -66,7 +67,7 @@ func NewQuery(qu string, params map[string]interface{}) *Query {
 }
 
 type Clienter interface {
-	Delete(ctx context.Context, link string, headers map[string] string) error
+	Delete(ctx context.Context, link string, headers map[string]string) error
 	Query(ctx context.Context, link string, qu *Query, ret interface{}) (token string, err error)
 	Create(ctx context.Context, link string, body, ret interface{}, headers map[string]string) error
 	Replace(ctx context.Context, link string, body, ret interface{}, headers map[string]string) error
@@ -80,7 +81,7 @@ type Client struct {
 }
 
 // Delete resource by self link
-func (c *Client) Delete(ctx context.Context, link string, headers map[string] string) error {
+func (c *Client) Delete(ctx context.Context, link string, headers map[string]string) error {
 	_, err := c.method(ctx, "DELETE", link, nil, &bytes.Buffer{}, headers)
 	return err
 }
@@ -191,6 +192,9 @@ func (c *Client) do(ctx context.Context, r *Request, data interface{}) (*http.Re
 	}
 	if resp.StatusCode == 412 {
 		return nil, ErrPreconditionFailed
+	}
+	if resp.StatusCode == 429 {
+		return nil, ErrTooManyRequests
 	}
 	if resp.StatusCode >= 300 {
 		err = &RequestError{}
