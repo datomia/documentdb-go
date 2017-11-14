@@ -43,7 +43,7 @@ type Request struct {
 // Return new resource request with type and id
 func ResourceRequest(link string, req *http.Request) *Request {
 	rId, rType := parse(link)
-	return &Request{rId, rType, req, 0}
+	return &Request{rId: rId, rType: rType, Request: req, RetryCount: 0}
 }
 
 // Add 3 default headers to *Request

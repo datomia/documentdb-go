@@ -16,6 +16,7 @@ import (
 var (
 	ResponseHook  func(ctx context.Context, method string, headers map[string][]string)
 	IgnoreContext bool
+	errRetry      = errors.New("retry")
 )
 
 type queryKey struct{}
@@ -175,6 +176,37 @@ func (c *Client) method(ctx context.Context, method, link string, ret interface{
 	return c.do(ctx, r, ret)
 }
 
+func retriable(code int) bool {
+	return code == http.StatusTooManyRequests || code == http.StatusServiceUnavailable
+}
+
+func (c *Client) checkResponse(ctx context.Context, r *Request, resp *http.Response) error {
+	if retriable(resp.StatusCode) {
+		r.RetryCount++
+		if r.RetryCount <= c.Config.MaxRetries {
+			delay := backoffDelay(r.RetryCount)
+			t := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				t.Stop()
+				return ctx.Err()
+			case <-t.C:
+				return errRetry
+			}
+		}
+	}
+	if resp.StatusCode == http.StatusPreconditionFailed {
+		return ErrPreconditionFailed
+	}
+	if resp.StatusCode >= 300 {
+		err := &RequestError{}
+		readJson(resp.Body, &err)
+		return err
+	}
+
+	return nil
+}
+
 // Private Do function, DRY
 func (c *Client) do(ctx context.Context, r *Request, data interface{}) (*http.Response, error) {
 	cli := c.Client
@@ -195,32 +227,18 @@ func (c *Client) do(ctx context.Context, r *Request, data interface{}) (*http.Re
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
 		if ResponseHook != nil {
 			ResponseHook(ctx, r.Request.Method, resp.Header)
 		}
-		if resp.StatusCode == 412 {
-			return nil, ErrPreconditionFailed
-		}
-		if resp.StatusCode == 429 || resp.StatusCode == 503 {
-			r.RetryCount++
-			if r.RetryCount <= c.Config.MaxRetries {
-				delay := retryDelay(r.RetryCount)
-				t := time.NewTimer(delay)
-				defer t.Stop()
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-t.C:
-					continue
-				}
-			}
-		}
-		if resp.StatusCode >= 300 {
-			err = &RequestError{}
-			readJson(resp.Body, &err)
+		if err := c.checkResponse(ctx, r, resp); err == errRetry {
+			resp.Body.Close()
+			continue
+		} else if err != nil {
+			resp.Body.Close()
 			return resp, err
 		}
+		defer resp.Body.Close()
+
 		if data == nil {
 			return resp, nil
 		}
@@ -228,7 +246,7 @@ func (c *Client) do(ctx context.Context, r *Request, data interface{}) (*http.Re
 	}
 }
 
-func retryDelay(retryCount int) time.Duration {
+func backoffDelay(retryCount int) time.Duration {
 	minTime := 300
 
 	if retryCount > 13 {
