@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"strings"
+	"time"
 )
 
 var (
@@ -36,7 +39,6 @@ func CtxCollection(ctx context.Context) string {
 
 var (
 	ErrPreconditionFailed = errors.New("precondition failed")
-	ErrTooManyRequests    = errors.New("too many requests")
 )
 
 type QueryParam struct {
@@ -182,29 +184,61 @@ func (c *Client) do(ctx context.Context, r *Request, data interface{}) (*http.Re
 	if !IgnoreContext {
 		r.Request = r.Request.WithContext(ctx)
 	}
-	resp, err := cli.Do(r.Request)
+	// save body to be able to retry the request
+	b, err := ioutil.ReadAll(r.Request.Body)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	if ResponseHook != nil {
-		ResponseHook(ctx, r.Request.Method, resp.Header)
+	for {
+		r.Request.Body = ioutil.NopCloser(bytes.NewReader(b))
+		resp, err := cli.Do(r.Request)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if ResponseHook != nil {
+			ResponseHook(ctx, r.Request.Method, resp.Header)
+		}
+		if resp.StatusCode == 412 {
+			return nil, ErrPreconditionFailed
+		}
+		if resp.StatusCode == 429 || resp.StatusCode == 503 {
+			r.RetryCount++
+			if r.RetryCount <= c.Config.MaxRetries {
+				delay := retryDelay(r.RetryCount)
+				t := time.NewTimer(delay)
+				defer t.Stop()
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-t.C:
+					continue
+				}
+			}
+		}
+		if resp.StatusCode >= 300 {
+			err = &RequestError{}
+			readJson(resp.Body, &err)
+			return resp, err
+		}
+		if data == nil {
+			return resp, nil
+		}
+		return resp, readJson(resp.Body, data)
 	}
-	if resp.StatusCode == 412 {
-		return nil, ErrPreconditionFailed
+}
+
+func retryDelay(retryCount int) time.Duration {
+	minTime := 300
+
+	if retryCount > 13 {
+		retryCount = 13
+	} else if retryCount > 8 {
+		retryCount = 8
 	}
-	if resp.StatusCode == 429 {
-		return nil, ErrTooManyRequests
-	}
-	if resp.StatusCode >= 300 {
-		err = &RequestError{}
-		readJson(resp.Body, &err)
-		return resp, err
-	}
-	if data == nil {
-		return resp, nil
-	}
-	return resp, readJson(resp.Body, data)
+
+	delay := (1 << uint(retryCount)) * (rand.Intn(minTime) + minTime)
+	return time.Duration(delay) * time.Millisecond
 }
 
 // Generate link

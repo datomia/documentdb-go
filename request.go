@@ -37,12 +37,13 @@ func (e RequestError) Error() string {
 type Request struct {
 	rId, rType string
 	*http.Request
+	RetryCount int
 }
 
 // Return new resource request with type and id
 func ResourceRequest(link string, req *http.Request) *Request {
 	rId, rType := parse(link)
-	return &Request{rId, rType, req}
+	return &Request{rId, rType, req, 0}
 }
 
 // Add 3 default headers to *Request

@@ -36,7 +36,8 @@ func Doc(id string) Document {
 }
 
 type Config struct {
-	MasterKey string
+	MasterKey  string
+	MaxRetries int
 }
 
 type DocumentDB struct {
