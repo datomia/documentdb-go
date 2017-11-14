@@ -6,13 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"strings"
+	"time"
 )
 
 var (
 	ResponseHook  func(ctx context.Context, method string, headers map[string][]string)
 	IgnoreContext bool
+	errRetry      = errors.New("retry")
 )
 
 type queryKey struct{}
@@ -36,7 +40,6 @@ func CtxCollection(ctx context.Context) string {
 
 var (
 	ErrPreconditionFailed = errors.New("precondition failed")
-	ErrTooManyRequests    = errors.New("too many requests")
 )
 
 type QueryParam struct {
@@ -173,6 +176,36 @@ func (c *Client) method(ctx context.Context, method, link string, ret interface{
 	return c.do(ctx, r, ret)
 }
 
+func retriable(code int) bool {
+	return code == http.StatusTooManyRequests || code == http.StatusServiceUnavailable
+}
+
+func (c *Client) checkResponse(ctx context.Context, retryCount int, resp *http.Response) error {
+	if retriable(resp.StatusCode) {
+		if retryCount < c.Config.MaxRetries {
+			delay := backoffDelay(retryCount)
+			t := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				t.Stop()
+				return ctx.Err()
+			case <-t.C:
+				return errRetry
+			}
+		}
+	}
+	if resp.StatusCode == http.StatusPreconditionFailed {
+		return ErrPreconditionFailed
+	}
+	if resp.StatusCode >= 300 {
+		err := &RequestError{}
+		readJson(resp.Body, &err)
+		return err
+	}
+
+	return nil
+}
+
 // Private Do function, DRY
 func (c *Client) do(ctx context.Context, r *Request, data interface{}) (*http.Response, error) {
 	cli := c.Client
@@ -182,29 +215,51 @@ func (c *Client) do(ctx context.Context, r *Request, data interface{}) (*http.Re
 	if !IgnoreContext {
 		r.Request = r.Request.WithContext(ctx)
 	}
-	resp, err := cli.Do(r.Request)
+	// save body to be able to retry the request
+	b, err := ioutil.ReadAll(r.Request.Body)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	if ResponseHook != nil {
-		ResponseHook(ctx, r.Request.Method, resp.Header)
+	retryCount := 0
+	for {
+		r.Request.Body = ioutil.NopCloser(bytes.NewReader(b))
+		resp, err := cli.Do(r.Request)
+		if err != nil {
+			return nil, err
+		}
+		if ResponseHook != nil {
+			ResponseHook(ctx, r.Request.Method, resp.Header)
+		}
+		err = c.checkResponse(ctx, retryCount, resp)
+		if err == errRetry {
+			resp.Body.Close()
+			retryCount++
+			continue
+		}
+		defer resp.Body.Close()
+
+		if err != nil {
+			return resp, err
+		}
+
+		if data == nil {
+			return resp, nil
+		}
+		return resp, readJson(resp.Body, data)
 	}
-	if resp.StatusCode == 412 {
-		return nil, ErrPreconditionFailed
+}
+
+func backoffDelay(retryCount int) time.Duration {
+	minTime := 300
+
+	if retryCount > 13 {
+		retryCount = 13
+	} else if retryCount > 8 {
+		retryCount = 8
 	}
-	if resp.StatusCode == 429 {
-		return nil, ErrTooManyRequests
-	}
-	if resp.StatusCode >= 300 {
-		err = &RequestError{}
-		readJson(resp.Body, &err)
-		return resp, err
-	}
-	if data == nil {
-		return resp, nil
-	}
-	return resp, readJson(resp.Body, data)
+
+	delay := (1 << uint(retryCount)) * (rand.Intn(minTime) + minTime)
+	return time.Duration(delay) * time.Millisecond
 }
 
 // Generate link
