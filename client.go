@@ -180,11 +180,10 @@ func retriable(code int) bool {
 	return code == http.StatusTooManyRequests || code == http.StatusServiceUnavailable
 }
 
-func (c *Client) checkResponse(ctx context.Context, r *Request, resp *http.Response) error {
+func (c *Client) checkResponse(ctx context.Context, retryCount int, resp *http.Response) error {
 	if retriable(resp.StatusCode) {
-		r.RetryCount++
-		if r.RetryCount <= c.Config.MaxRetries {
-			delay := backoffDelay(r.RetryCount)
+		if retryCount < c.Config.MaxRetries {
+			delay := backoffDelay(retryCount)
 			t := time.NewTimer(delay)
 			select {
 			case <-ctx.Done():
@@ -221,6 +220,7 @@ func (c *Client) do(ctx context.Context, r *Request, data interface{}) (*http.Re
 	if err != nil {
 		return nil, err
 	}
+	retryCount := 0
 	for {
 		r.Request.Body = ioutil.NopCloser(bytes.NewReader(b))
 		resp, err := cli.Do(r.Request)
@@ -230,14 +230,17 @@ func (c *Client) do(ctx context.Context, r *Request, data interface{}) (*http.Re
 		if ResponseHook != nil {
 			ResponseHook(ctx, r.Request.Method, resp.Header)
 		}
-		if err := c.checkResponse(ctx, r, resp); err == errRetry {
+		err = c.checkResponse(ctx, retryCount, resp)
+		if err == errRetry {
 			resp.Body.Close()
+			retryCount++
 			continue
-		} else if err != nil {
-			resp.Body.Close()
-			return resp, err
 		}
 		defer resp.Body.Close()
+
+		if err != nil {
+			return resp, err
+		}
 
 		if data == nil {
 			return resp, nil
